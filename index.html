@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flappy Bird — Победи за 3 очка!</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: linear-gradient(180deg, #4EC0CA 0%, #70c5ce 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+  }
+  #game-container {
+    position: relative;
+    width: 400px;
+    height: 600px;
+    max-width: 100vw;
+    max-height: 100vh;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #70c5ce;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.9);
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    text-align: center;
+    padding: 20px;
+    z-index: 10;
+    overflow-y: auto;
+  }
+  #overlay.active { display: flex; }
+  #overlay h1 {
+    font-size: 32px;
+    margin-bottom: 15px;
+    color: #FFD700;
+    text-shadow: 2px 2px 0 #000;
+  }
+  #overlay p {
+    font-size: 16px;
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+
+  /* === Кнопки === */
+  .btn {
+    padding: 12px 26px;
+    font-size: 17px;
+    font-family: inherit;
+    font-weight: bold;
+    background: #FFD700;
+    color: #000;
+    border: 3px solid #000;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #000;
+    transition: transform 0.1s, background 0.1s;
+    user-select: none;
+  }
+  .btn:hover { transform: translateY(-2px); background: #FFE44D; }
+  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #000; }
+
+  /* === Экран правил === */
+  #rules-wrap {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    max-width: 92%;
+  }
+  #rules-wrap h1 { font-size: 26px; margin-bottom: 5px; }
+  .rules-box {
+    font-size: 15px;
+    line-height: 1.7;
+    color: #eee;
+    background: rgba(255,255,255,0.08);
+    padding: 16px 20px;
+    border-radius: 12px;
+    border-left: 4px solid #FFD700;
+    text-align: left;
+    width: 100%;
+  }
+  .rules-box b { color: #FFD700; }
+  .rules-box .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+  }
+  .rules-box .icon { font-size: 18px; width: 24px; text-align: center; }
+
+  /* === Экран победы с видео === */
+  #video-wrap {
+    width: 100%;
+    max-width: 100%;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  #video-wrap h1 { margin-bottom: 5px; font-size: 26px; }
+
+  #video-frame {
+    position: relative;
+    width: 100%;
+    max-width: 520px;
+    max-height: 45vh;
+    background: #000;
+    border-radius: 10px;
+    border: 3px solid #FFD700;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  #reward-video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-height: 45vh;
+    object-fit: contain;
+    background: #000;
+  }
+
+  /* Кастомные контролы */
+  #video-controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+  }
+  #video-controls .btn {
+    padding: 9px 15px;
+    font-size: 14px;
+  }
+
+  /* Прогресс-бар */
+  #progress-wrap {
+    width: 100%;
+    max-width: 520px;
+    height: 8px;
+    background: #333;
+    border-radius: 4px;
+    cursor: pointer;
+    overflow: hidden;
+    border: 2px solid #000;
+  }
+  #progress-bar {
+    height: 100%;
+    width: 0%;
+    background: #FFD700;
+    transition: width 0.1s linear;
+  }
+
+  /* Полноэкранный режим для видео-обёртки */
+  #video-wrap:fullscreen,
+  #video-wrap:-webkit-full-screen {
+    background: #000;
+    justify-content: center;
+    padding: 20px;
+    gap: 20px;
+  }
+  #video-wrap:fullscreen #video-frame,
+  #video-wrap:-webkit-full-screen #video-frame {
+    max-width: 95vw;
+    max-height: 75vh;
+    border-width: 4px;
+  }
+  #video-wrap:fullscreen #reward-video,
+  #video-wrap:-webkit-full-screen #reward-video {
+    max-height: 75vh;
+  }
+  #video-wrap:fullscreen #video-controls .btn,
+  #video-wrap:-webkit-full-screen #video-controls .btn {
+    padding: 12px 22px;
+    font-size: 16px;
+  }
+
+  @media (max-height: 700px) {
+    #video-frame, #reward-video { max-height: 38vh; }
+  }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="game" width="400" height="600"></canvas>
+
+  <div id="overlay">
+    <!-- 1. Экран с правилами (появляется перед каждой игрой) -->
+    <div id="rules-wrap">
+      <h1>ФИНАЛЬНОЕ ИСПЫТАНИЕ: 🐦 FLAPPY BIRD</h1>
+      <div class="rules-box">
+        <div class="row"><span class="icon">🎯</span><span><b>Цель:</b> набери <b>3 очка</b> и получи финальный приз!</span></div>
+        <div class="row"><span class="icon">👆</span><span><b>Управление:</b> клик, пробел или тап по экрану</span></div>
+        <div class="row"><span class="icon">🟢</span><span>Пролетай между <b>трубами</b> — получай <b>+1 очко</b></span></div>
+        <div class="row"><span class="icon">💥</span><span>Не задень трубы и землю — иначе проигрыш</span></div>
+        <div class="row"><span class="icon">🎬</span><span>После победы тебя ждёт <b>финальная награда!</b></span></div>
+      </div>
+      <button class="btn" id="start-game-btn">🎮 НАЧАТЬ ИГРУ</button>
+    </div>
+
+    <!-- 2. Экран победы с видео -->
+    <div id="video-wrap">
+      <h1>🎉 ПОБЕДА! 🎉</h1>
+      <p style="margin-bottom:5px;">Смотри видео награды:</p>
+
+      <div id="video-frame">
+        <video id="reward-video" preload="metadata" playsinline>
+          <source src="reward.mp4" type="video/mp4">
+          Ваш браузер не поддерживает видео. Положите файл <b>reward.mp4</b> рядом с index.html.
+        </video>
+      </div>
+
+      <div id="progress-wrap">
+        <div id="progress-bar"></div>
+      </div>
+
+      <div id="video-controls">
+        <button class="btn" id="play-btn">▶ Играть</button>
+        <button class="btn" id="pause-btn">⏸ Пауза</button>
+        <button class="btn" id="restart-video-btn">🔄 Заново</button>
+        <button class="btn" id="fullscreen-btn">⛶ Полный экран</button>
+      </div>
+
+      <button class="btn" id="play-again-btn" style="margin-top:8px;">🐦 Играть снова</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+
+  const rulesWrap = document.getElementById('rules-wrap');
+  const videoWrap = document.getElementById('video-wrap');
+  const startGameBtn = document.getElementById('start-game-btn');
+  const playAgainBtn = document.getElementById('play-again-btn');
+
+  const video = document.getElementById('reward-video');
+  const playBtn = document.getElementById('play-btn');
+  const pauseBtn = document.getElementById('pause-btn');
+  const restartVideoBtn = document.getElementById('restart-video-btn');
+  const fullscreenBtn = document.getElementById('fullscreen-btn');
+  const progressBar = document.getElementById('progress-bar');
+  const progressWrap = document.getElementById('progress-wrap');
+
+  const W = canvas.width;
+  const H = canvas.height;
+  const WIN_SCORE = 3;
+
+  // === НАСТРОЙКИ ФИЗИКИ (замедленное падение) ===
+  const GRAVITY = 0.4;
+  const JUMP = -3.0;
+  const MAX_FALL_SPEED = 4.5;
+  const GLIDE_FACTOR = 0.4;
+
+  const PIPE_W = 60;
+  const PIPE_GAP = 165;
+  const PIPE_SPEED = 2.2;
+  const PIPE_INTERVAL = 100;
+
+  let bird, pipes, score, frame, state, groundX;
+
+  function reset() {
+    bird = { x: 80, y: H/2, vy: 0, r: 14, rot: 0 };
+    pipes = [];
+    score = 0;
+    frame = 0;
+    groundX = 0;
+    state = 'ready';
+  }
+
+  function spawnPipe() {
+    const minTop = 60;
+    const maxTop = H - PIPE_GAP - 120;
+    const topH = Math.random() * (maxTop - minTop) + minTop;
+    pipes.push({ x: W, topH, passed: false });
+  }
+
+  function flap() {
+    if (state === 'ready') {
+      state = 'playing';
+      bird.vy = JUMP;
+    } else if (state === 'playing') {
+      bird.vy = JUMP;
+    }
+  }
+
+  function update() {
+    if (state !== 'playing') {
+      if (state === 'ready') {
+        bird.y = H/2 + Math.sin(frame * 0.1) * 6;
+        bird.rot = Math.sin(frame * 0.1) * 0.1;
+      }
+      frame++;
+      groundX = (groundX - PIPE_SPEED) % 24;
+      return;
+    }
+
+    frame++;
+    groundX = (groundX - PIPE_SPEED) % 24;
+
+    if (bird.vy < 0) {
+      bird.vy += GRAVITY * GLIDE_FACTOR;
+    } else {
+      bird.vy += GRAVITY;
+    }
+    if (bird.vy > MAX_FALL_SPEED) bird.vy = MAX_FALL_SPEED;
+
+    bird.y += bird.vy;
+    bird.rot = Math.min(Math.max(bird.vy * 0.05, -0.5), 1.2);
+
+    if (frame % PIPE_INTERVAL === 0) spawnPipe();
+
+    for (let i = pipes.length - 1; i >= 0; i--) {
+      const p = pipes[i];
+      p.x -= PIPE_SPEED;
+
+      if (!p.passed && p.x + PIPE_W < bird.x - bird.r) {
+        p.passed = true;
+        score++;
+        if (score >= WIN_SCORE) {
+          triggerWin();
+          return;
+        }
+      }
+
+      if (bird.x + bird.r > p.x && bird.x - bird.r < p.x + PIPE_W) {
+        if (bird.y - bird.r < p.topH || bird.y + bird.r > p.topH + PIPE_GAP) {
+          triggerLose();
+          return;
+        }
+      }
+
+      if (p.x + PIPE_W < 0) pipes.splice(i, 1);
+    }
+
+    if (bird.y + bird.r >= H - 60) {
+      bird.y = H - 60 - bird.r;
+      triggerLose();
+      return;
+    }
+    if (bird.y - bird.r < 0) {
+      bird.y = bird.r;
+      bird.vy = 0;
+    }
+  }
+
+  function draw() {
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, '#4EC0CA');
+    sky.addColorStop(1, '#A8E6CF');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    drawCloud(60 - (frame * 0.3) % (W + 100), 100, 1);
+    drawCloud(280 - (frame * 0.2) % (W + 150), 180, 0.7);
+    drawCloud(180 - (frame * 0.4) % (W + 200), 60, 0.5);
+
+    pipes.forEach(p => drawPipe(p));
+
+    ctx.fillStyle = '#DED895';
+    ctx.fillRect(0, H - 60, W, 60);
+    ctx.fillStyle = '#C9B458';
+    ctx.fillRect(0, H - 60, W, 8);
+    ctx.fillStyle = '#5DA83E';
+    ctx.fillRect(0, H - 60, W, 6);
+    ctx.fillStyle = '#B5A046';
+    for (let x = groundX; x < W; x += 24) {
+      ctx.fillRect(x, H - 40, 12, 4);
+    }
+
+    drawBird();
+
+    ctx.fillStyle = 'white';
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 3;
+    ctx.font = 'bold 42px Courier New';
+    ctx.textAlign = 'center';
+    ctx.strokeText(score + ' / ' + WIN_SCORE, W/2, 70);
+    ctx.fillText(score + ' / ' + WIN_SCORE, W/2, 70);
+  }
+
+  function drawCloud(x, y, s) {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.arc(x, y, 20*s, 0, Math.PI*2);
+    ctx.arc(x + 25*s, y + 5*s, 25*s, 0, Math.PI*2);
+    ctx.arc(x + 55*s, y, 18*s, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  function drawPipe(p) {
+    const grad = ctx.createLinearGradient(p.x, 0, p.x + PIPE_W, 0);
+    grad.addColorStop(0, '#4CAF50');
+    grad.addColorStop(0.5, '#8BC34A');
+    grad.addColorStop(1, '#2E7D32');
+    ctx.fillStyle = grad;
+
+    ctx.fillRect(p.x, 0, PIPE_W, p.topH);
+    ctx.fillRect(p.x - 4, p.topH - 24, PIPE_W + 8, 24);
+
+    const bottomY = p.topH + PIPE_GAP;
+    ctx.fillRect(p.x, bottomY, PIPE_W, H - bottomY - 60);
+    ctx.fillRect(p.x - 4, bottomY, PIPE_W + 8, 24);
+
+    ctx.strokeStyle = '#1B5E20';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(p.x, 0, PIPE_W, p.topH);
+    ctx.strokeRect(p.x, bottomY, PIPE_W, H - bottomY - 60);
+    ctx.strokeRect(p.x - 4, p.topH - 24, PIPE_W + 8, 24);
+    ctx.strokeRect(p.x - 4, bottomY, PIPE_W + 8, 24);
+  }
+
+  function drawBird() {
+    ctx.save();
+    ctx.translate(bird.x, bird.y);
+    ctx.rotate(bird.rot);
+
+    const bg = ctx.createRadialGradient(-4, -4, 2, 0, 0, bird.r + 4);
+    bg.addColorStop(0, '#FFE066');
+    bg.addColorStop(1, '#F5B800');
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    ctx.arc(0, 0, bird.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#8B6914';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    const wingSpeed = bird.vy < 0 ? 0.5 : 0.2;
+    ctx.fillStyle = '#FFF3B0';
+    ctx.beginPath();
+    ctx.ellipse(-3, 2, 8, 5, Math.sin(frame * wingSpeed) * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(5, -5, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = 'black';
+    ctx.beginPath();
+    ctx.arc(6.5, -5, 2.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#FF6B35';
+    ctx.beginPath();
+    ctx.moveTo(11, -1);
+    ctx.lineTo(20, 2);
+    ctx.lineTo(11, 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // === Управление экранами ===
+  function showScreen(name) {
+    rulesWrap.style.display = 'none';
+    videoWrap.style.display = 'none';
+    if (name === 'rules') rulesWrap.style.display = 'flex';
+    if (name === 'video') videoWrap.style.display = 'flex';
+  }
+
+  function showRules() {
+    overlay.classList.add('active');
+    showScreen('rules');
+    exitFullscreenIfNeeded();
+  }
+
+  function triggerLose() {
+    state = 'gameover';
+    // После проигрыша сразу возвращаемся к экрану правил
+    setTimeout(() => {
+      reset();
+      showRules();
+    }, 400);
+  }
+
+  function triggerWin() {
+    state = 'win';
+    overlay.classList.add('active');
+    showScreen('video');
+    video.currentTime = 0;
+    video.play().catch(() => {});
+  }
+
+  // === Управление видео ===
+  playBtn.addEventListener('click', () => video.play());
+  pauseBtn.addEventListener('click', () => video.pause());
+  restartVideoBtn.addEventListener('click', () => {
+    video.currentTime = 0;
+    video.play();
+  });
+
+  video.addEventListener('timeupdate', () => {
+    if (video.duration) {
+      progressBar.style.width = (video.currentTime / video.duration * 100) + '%';
+    }
+  });
+
+  progressWrap.addEventListener('click', (e) => {
+    const rect = progressWrap.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    if (video.duration) video.currentTime = ratio * video.duration;
+  });
+
+  // === Полноэкранный режим ===
+  function isFullscreen() {
+    return document.fullscreenElement ||
+           document.webkitFullscreenElement ||
+           document.msFullscreenElement;
+  }
+
+  function exitFullscreenIfNeeded() {
+    if (isFullscreen()) {
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if (document.msExitFullscreen) document.msExitFullscreen();
+    }
+  }
+
+  fullscreenBtn.addEventListener('click', () => {
+    if (isFullscreen()) {
+      exitFullscreenIfNeeded();
+      return;
+    }
+    const el = videoWrap;
+    if (el.requestFullscreen) {
+      el.requestFullscreen().catch(err => console.warn('Fullscreen error:', err));
+    } else if (el.webkitRequestFullscreen) {
+      el.webkitRequestFullscreen();
+    } else if (el.msRequestFullscreen) {
+      el.msRequestFullscreen();
+    } else {
+      // Fallback: полноэкранный режим прямо на видео
+      const v = video;
+      if (v.requestFullscreen) v.requestFullscreen();
+      else if (v.webkitRequestFullscreen) v.webkitRequestFullscreen();
+      else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen(); // iOS Safari
+    }
+  });
+
+  // Обновляем текст кнопки при смене режима
+  function updateFullscreenBtnText() {
+    fullscreenBtn.textContent = isFullscreen() ? '✕ Выйти' : '⛶ Полный экран';
+  }
+  ['fullscreenchange', 'webkitfullscreenchange', 'msfullscreenchange'].forEach(ev => {
+    document.addEventListener(ev, updateFullscreenBtnText);
+  });
+
+  // === Кнопки игры ===
+  startGameBtn.addEventListener('click', () => {
+    overlay.classList.remove('active');
+    exitFullscreenIfNeeded();
+    reset();
+    state = 'ready';
+  });
+
+  playAgainBtn.addEventListener('click', () => {
+    video.pause();
+    video.currentTime = 0;
+    overlay.classList.remove('active');
+    exitFullscreenIfNeeded();
+    // Показываем экран правил перед новой игрой
+    setTimeout(showRules, 200);
+  });
+
+  // Управление птицей
+  canvas.addEventListener('mousedown', flap);
+  canvas.addEventListener('touchstart', (e) => { e.preventDefault(); flap(); }, { passive: false });
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' || e.code === 'ArrowUp') {
+      e.preventDefault();
+      flap();
+    }
+  });
+
+  function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // === Запуск: сразу показываем экран правил ===
+  reset();
+  showRules();
+  loop();
+})();
+</script>
+</body>
+</html>
